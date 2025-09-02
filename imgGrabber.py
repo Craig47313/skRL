@@ -64,6 +64,7 @@ def save_tiles(tiles, save_dir, screenshotId):
         cv2.imwrite(fname, tile)
     print('shape of tiles when saving')
     print(tiles[0].shape)
+    print("Screenshot id: " + screenshotId)
 def show_tiles(tiles):
     # tiles.shape = (64, 147, 147, 3)
     rows, cols = 8, 8
