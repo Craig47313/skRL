@@ -4,8 +4,8 @@ import tkinter as tk
 from tkinter import Label, Button
 from PIL import Image, ImageTk
 
-RAW_FOLDER = "dataraw"
-DATASET_FOLDER = "data"
+RAW_FOLDER = "dataRAW"
+DATASET_FOLDER = "dataSorted"
 
 labels = ["board", "pawn", "player","rook", "knight", "bishop", "queen", "king", "na"]
 for lbl in labels:
@@ -26,6 +26,11 @@ nameOfLastFile = "n/a"
 img_label = tk.Label(root)
 img_label.pack()
 
+progressBar_label = tk.Label(root)
+progressBar_label.pack()
+progressBar_label.config(font=("monospace",9))
+
+
 def show_image():
     global current, photo, nameOfLastFile
     if current < len(images):
@@ -33,8 +38,24 @@ def show_image():
         img = Image.open(path).resize((300, 300))  # resize for display
         photo = ImageTk.PhotoImage(img)
         img_label.config(image=photo)
-        numLabel.config(text=nameOfLastFile)
+        numLabel.config(text=nameOfLastFile) #shows name of last for so you know the file name if you accidentally missort smth
         nameOfLastFile = images[current]
+
+        progress = current/len(images)*100
+        bar = ""
+        for i in range(100):
+            if(i % 10 == 0):
+                bar += "|"
+            if(i < progress):
+                bar += "#"
+            elif(i == int(progress+1)):
+                bar+= str(int((progress%1)*10))
+                #bar += "*"
+            else:
+                bar += '-'
+            
+        progressBar_label.config(text=bar)
+
     else:
         img_label.config(text="Fin")
 
