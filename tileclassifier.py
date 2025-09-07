@@ -1,10 +1,9 @@
 ''' -*- coding: utf-8 -*-
 learned from Rob Mulla's 'Train Your first PyTorch Model [Card Classifier]' which can be found at https://www.kaggle.com/code/robikscube/train-your-first-pytorch-model-card-classifier
 --> also learned using Kie Codes 'Image Classifier in PyTorch' which can be found at https://www.youtube.com/watch?v=igQeI29FIQM
-will create smth better using a pretained model like resnet and increase epochs 
-this code is not for production and is was made for a colab notebook @ https://colab.research.google.com/drive/1I3KSzAExvrsQhLlgN-Klkl03bW5RO6ud?authuser=0#scrollTo=ubocnol43kSh
-with about data balenced at 25~ images per class, this achieved Accuracy:  0.8812 Precision: 0.9075 Recall: 0.8812 F1 Score: 0.8840
-some code modified from original by chatgpt such as printing recall, precision, and f1 instead of just accuracy'''
+Very heavily self modified to used pretrained resnet which got accuracy precision recall and f1 all at around 97.5
+this code is has been modified from the colab I originally made it in @ https://colab.research.google.com/drive/1I3KSzAExvrsQhLlgN-Klkl03bW5RO6ud?authuser=0#scrollTo=ubocnol43kSh
+'''
 
 """skRL_TileClassifier.ipynb
 
@@ -21,10 +20,12 @@ import torch.optim as optim
 import torchvision
 import torchvision.transforms as transforms
 from torchsummary import summary
+from torchvision import models
 import matplotlib.pyplot as plt
 import numpy as np
 from torch.utils.data import random_split
 from torch.utils.data import DataLoader
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
 device = torch.device("cpu")
 if torch.cuda.is_available():
@@ -34,24 +35,22 @@ elif torch.backends.mps.is_built() and torch.backends.mps.is_available():
 print(device)
 
 transform = transforms.Compose([
+    transforms.Resize((224, 224)),  # ResNet expects 224x224
     transforms.ToTensor(),
-    transforms.Normalize(
-        (0.5, 0.5, 0.5),
-        (0.5, 0.5, 0.5)
-    )
+    transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                         std=[0.229, 0.224, 0.225])
 ])
+train_set = torchvision.datasets.ImageFolder(root="./dataBalenced/test", transform=transform)
+test_set = torchvision.datasets.ImageFolder(root="./dataBalenced/train", transform=transform)
 
-train_set = torchvision.datasets.ImageFolder(root="/content/drive/MyDrive/dataBalenced/test", transform=transform)
-test_set = torchvision.datasets.ImageFolder(root="/content/drive/MyDrive/dataBalenced/train", transform=transform)
-
-train_loader = torch.utils.data.DataLoader(train_set, batch_size=4, shuffle=True)
-test_loader = torch.utils.data.DataLoader(test_set, batch_size=4, shuffle=True)
+train_loader = DataLoader(train_set, batch_size=4, shuffle=True)
+test_loader = DataLoader(test_set, batch_size=4, shuffle=True)
 
 classes = ("bishop", "board", "king", "knight", "pawn", "player", "queen", "rook")
 
 print(f"Shape of the images in the training dataset: {train_loader.dataset[0][0].shape}")
 
-fig, axes = plt.subplots(1, 10, figsize=(12, 3))
+'''fig, axes = plt.subplots(1, 10, figsize=(12, 3))
 for i in range(10):
     image = train_loader.dataset[i][0].permute(1, 2, 0)
     denormalized_image= image / 2 + 0.5
@@ -59,36 +58,26 @@ for i in range(10):
     axes[i].set_title(classes[train_loader.dataset[i][1]])
     axes[i].axis('off')
 plt.show()
+not needed really
+'''
 
-class ConvNeuralNet(nn.Module):
-    def __init__(self, num_classes=8):  # change num_classes if not 10
-        super().__init__()
-        self.conv1 = nn.Conv2d(3, 64, 3)
-        self.conv2 = nn.Conv2d(64, 128, 3)
-        self.pool = nn.MaxPool2d(2, stride=2)
+#create resnet model
+import os
+import certifi
+os.environ['SSL_CERT_FILE'] = certifi.where() #need an ssl certificate to work and python not working to give one
 
-        # match flattened size after convs + pools
-        self.fc1 = nn.Linear(128 * 35 * 35, 120)
-        self.fc2 = nn.Linear(120, 84)
-        self.fc3 = nn.Linear(84, num_classes)
+net = models.resnet18(pretrained=True)
+net.fc = nn.Linear(net.fc.in_features, len(classes))
+net = net.to(device)
 
-    def forward(self, x):
-        x = F.relu(self.conv1(x))
-        x = self.pool(x)
-        x = F.relu(self.conv2(x))
-        x = self.pool(x)
-        x = torch.flatten(x, 1)
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = F.log_softmax(self.fc3(x), dim=1)
-        return x
-net = ConvNeuralNet()
-net.to(device)
 
-loss_function = nn.NLLLoss()
-optimizer = optim.Adam(net.parameters(), lr=0.001)
 
-epochs = 10
+#training loop 
+criterion = nn.CrossEntropyLoss()
+optimizer = optim.AdamW(net.parameters(), lr=1e-4)
+scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.5)
+
+epochs = 100
 for epoch in range(epochs):
 
     running_loss = 0.0
@@ -97,18 +86,21 @@ for epoch in range(epochs):
 
         optimizer.zero_grad()
         outputs = net(inputs)
-        loss = loss_function(outputs, labels)
+        loss = criterion(outputs, labels)
 
         loss.backward()
         optimizer.step()
 
         running_loss += loss.item()
-        if i % 20 == 19:
-            print(f'[{epoch + 1}/{epochs}, {i + 1:5d}] loss: {running_loss / 2000:.3f}')
-            running_loss = 0.0
+    print(f"[{epoch+1}/{epochs}] Loss: {running_loss/len(train_loader):.4f}")
 
 print('Finished Training')
 
+#save model
+torch.save(net.state_dict(), "resnet_chess.pth")
+print("Model saved as resnet_chess.pth")
+
+#testing
 def view_classification(image, probabilities):
     probabilities = probabilities.data.numpy().squeeze()
 
@@ -127,17 +119,19 @@ def view_classification(image, probabilities):
     ax2.set_xlim(0, 1.1)
     plt.tight_layout()
 
+print("Test 10 images")
 images, _ = next(iter(test_loader))
+for i in range(10):
+    image = images[3]
+    batched_image = image.unsqueeze(0).to(device)
+    with torch.no_grad():
+        log_probabilities = net(batched_image)
 
-image = images[3]
-batched_image = image.unsqueeze(0).to(device)
-with torch.no_grad():
-    log_probabilities = net(batched_image)
-
-probabilities = torch.exp(log_probabilities).squeeze().cpu()
-view_classification(image, probabilities)
-
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+    probabilities = torch.exp(log_probabilities).squeeze().cpu()
+    view_classification(image, probabilities)
+    _, predicted = torch.max(log_probabilities.data, 1)
+    predictedClass = classes[predicted.item()]
+    print(predictedClass)
 
 net.eval()
 all_preds = []
