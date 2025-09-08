@@ -1,8 +1,9 @@
 ''' -*- coding: utf-8 -*-
 learned from Rob Mulla's 'Train Your first PyTorch Model [Card Classifier]' which can be found at https://www.kaggle.com/code/robikscube/train-your-first-pytorch-model-card-classifier
 --> also learned using Kie Codes 'Image Classifier in PyTorch' which can be found at https://www.youtube.com/watch?v=igQeI29FIQM
-Very heavily self modified to used pretrained resnet which got accuracy precision recall and f1 all at around 97.5
-this code is has been modified from the colab I originally made it in @ https://colab.research.google.com/drive/1I3KSzAExvrsQhLlgN-Klkl03bW5RO6ud?authuser=0#scrollTo=ubocnol43kSh
+Very heavily self modified to used pretrained resnet which got 
+accuracy precision recall and f1 all at around 97.5 with 100 epochs and 95~ with 60 epochs
+this code is has been modified from the colab I originally made it in https://colab.research.google.com/drive/1I3KSzAExvrsQhLlgN-Klkl03bW5RO6ud?authuser=0#scrollTo=ubocnol43kSh
 '''
 
 """skRL_TileClassifier.ipynb
