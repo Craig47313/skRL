@@ -75,7 +75,7 @@ def show_tiles(tiles, classes = ("bishop", "board", "king", "knight", "pawn", "p
 
     net = models.resnet18(weights=None)
     num_ftrs = net.fc.in_features
-    net.fc = nn.Linear(num_ftrs, 8) 
+    net.fc = nn.Linear(num_ftrs, 8)  
 
     net.load_state_dict(torch.load("resnet_chess.pth", map_location=torch.device("cpu")))
     net.eval()
