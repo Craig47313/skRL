@@ -19,7 +19,7 @@ class actions():
         net.load_state_dict(torch.load("resnet_chess.pth", map_location=torch.device("cpu")))
         net.eval()
         self.net = net
-
+        self.gameOverScreen = cv2.imread("gameOverScreen.png")
         self.classes = ("bishop", "board", "king", "knight", "pawn", "player", "queen", "rook")
 
     def createTiles(img):
@@ -46,6 +46,7 @@ class actions():
                             std=[0.229, 0.224, 0.225])
         ])
         states = []
+        playerState = -1
         for i in range(64):#64 tiles
             img = Image.fromarray(tiles[i].astype(np.uint8)) 
             img_t = transform(img).unsqueeze(0)  # batch dimension
@@ -55,9 +56,21 @@ class actions():
                 probabilities = torch.softmax(outputs, dim=1)
                 confidence, predicted = torch.max(probabilities, 1)
                 predInd = predicted.item()
-                #label = self.classes[predicted.item()]
+                label = self.classes[predInd]
+                if(label == "player"):
+                    playerState = i
             states.append(predInd)
-        return states
+        self.lastImg = img
+        self.states =  states
+        self.playerState = playerState
+    def detectDeath(self):
+        if(np.mean((self.img.astype("float") - self.gameOverScreen.astype("float")) ** 2)) < 500:
+            return True
+        else:
+            return False
+
+
+    
 
 
     

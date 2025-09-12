@@ -130,6 +130,7 @@ while runProgram:
         
         if(save_img):
             save_tiles(tiles, 'dataraw',str(random.random()))
+            #cv2.imwrite("gameOverScreen.png", img)
         
         screenshot_done = False
         show_window = False
