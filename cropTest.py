@@ -2,7 +2,7 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 print(cv2.__version__)
-img = cv2.imread("screenshot.png")
+img = cv2.imread("gameOverScreen.png")
 imgCrop = img[440: 1616, 880:2056]
 #plt.imshow(img)
 
