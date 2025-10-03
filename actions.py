@@ -5,7 +5,7 @@ import time
 import cv2
 import numpy as np
 import torch
-from torch.nn import nn
+import torch.nn as nn
 from torchvision import models, transforms
 from PIL import Image
 
@@ -21,8 +21,10 @@ class actions():
         self.net = net
         self.gameOverScreen = cv2.imread("gameOverScreen.png")
         self.classes = ("bishop", "board", "king", "knight", "pawn", "player", "queen", "rook")
-
-    def createTiles(img):
+        self.spareAmmo = 6
+        self.currentAmmo = 2 
+        self.tileStates = [[1 for _ in range(8)] for _ in range(8)]
+    def createTiles(self, img):
         imgCrop = img[440: 1616, 880:2056]
         channelsAmt = 3
         tileWidth = (imgCrop.shape[0]//8)
@@ -31,13 +33,19 @@ class actions():
         tiles = imgCrop.reshape(8, tileWidth, 8, tileHeight, channelsAmt)
         tiles = tiles.transpose(0, 2, 1, 3, 4)
         tiles = tiles.reshape(64, tileWidth, tileHeight, channelsAmt)
-        print('shape of tiles when creating')
-        print(tiles[0].shape)
+        #print('shape of tiles when creating')
+        #print(tiles[0].shape)
         return tiles
-    def getState(self, savePath):
+    def getState(self):
         screenshot = pyautogui.screenshot()
         #img = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
         img = cv2.imread("screenshot.png")
+
+        self.img = img
+
+        if(img is None):
+            return -1
+        
         tiles = self.createTiles(img)
 
         transform = transforms.Compose([
@@ -46,7 +54,7 @@ class actions():
         transforms.Normalize(mean=[0.485, 0.456, 0.406],
                             std=[0.229, 0.224, 0.225])
         ])
-        playerState = -1
+        playerState = None
         tileStates = []
 
         flatIdx = -1
@@ -71,76 +79,124 @@ class actions():
         self.lastTiles = self.tileStates
         self.tileStates  =  tileStates
         self.playerState = playerState
-    def detectDeath(self):
-        if(np.mean((self.img.astype("float") - self.gameOverScreen.astype("float")) ** 2)) < 500:#if mse b/t death img and that img is the same then infers is a death
+        return np.array(tileStates).flatten()
+    def detectDeath(self, threshold = 500):
+        if(np.mean((self.img.astype("float") - self.gameOverScreen.astype("float")) ** 2)) < threshold:#if mse b/t death img and that img is the same then infers is a death
             return True
         else:
             return False
-    def getActions(self):
-        unavialableTiles = [[False for _ in range(8)] for _ in range(8)] 
-        for i in range(8): 
-            for j in range(8):
-                tileType = self.tileStates[i][j]  
-                # self.classes = (0 "bishop", 1 "board", 2 "king", 3 "knight", 4 "pawn", 5 "player", 6 "queen", 7 "rook")
+    def getActions(self, shootingDegree = 20):
 
-                if tileType == 1:  # board 
-                    continue
-                else:
-                    unavialableTiles[i][j] = True  #can't move to occupied
+        if(not (self.detectDeath() or self.playerState == None)):
+            avialableTiles = [[True for _ in range(8)] for _ in range(8)] 
+            for i in range(8): 
+                for j in range(8):
+                    tileType = self.tileStates[i][j]  
+                    # self.classes = (0 "bishop", 1 "board", 2 "king", 3 "knight", 4 "pawn", 5 "player", 6 "queen", 7 "rook")
 
-                if tileType == 0:  # bishop
-                    for dx, dy in [(-1, -1), (-1, 1), (1, -1), (1, 1)]:
-                        x, y = i + dx, j + dy
-                        while 0 <= x < 8 and 0 <= y < 8:
-                            unavialableTiles[x][y] = True
-                            if self.tileStates[x][y] != 1:  # stop if blocked
-                                break
-                            x += dx
-                            y += dy
+                    if tileType == 1:  # board 
+                        continue
+                    else:
+                        avialableTiles[i][j] = False  #can't move to occupied
 
-                elif tileType == 2:  # king
-                    for dx in [-1, 0, 1]:
-                        for dy in [-1, 0, 1]:
-                            if dx == 0 and dy == 0:
-                                continue
+                    if tileType == 0:  # bishop
+                        for dx, dy in [(-1, -1), (-1, 1), (1, -1), (1, 1)]:
+                            x, y = i + dx, j + dy
+                            while 0 <= x < 8 and 0 <= y < 8:
+                                avialableTiles[x][y] = False
+                                if self.tileStates[x][y] != 1:  # stop if blocked
+                                    break
+                                x += dx
+                                y += dy
+
+                    elif tileType == 2:  # king
+                        for dx in [-1, 0, 1]:
+                            for dy in [-1, 0, 1]:
+                                if dx == 0 and dy == 0:
+                                    continue
+                                x, y = i + dx, j + dy
+                                if 0 <= x < 8 and 0 <= y < 8:
+                                    avialableTiles[x][y] = False
+
+                    elif tileType == 3:  # knight
+                        for dx, dy in [(-2, -1), (-2, 1), (-1, -2), (-1, 2),
+                                    (1, -2), (1, 2), (2, -1), (2, 1)]:
                             x, y = i + dx, j + dy
                             if 0 <= x < 8 and 0 <= y < 8:
-                                unavialableTiles[x][y] = True
+                                avialableTiles[x][y] = False
 
-                elif tileType == 3:  # knight
-                    for dx, dy in [(-2, -1), (-2, 1), (-1, -2), (-1, 2),
-                                (1, -2), (1, 2), (2, -1), (2, 1)]:
-                        x, y = i + dx, j + dy
-                        if 0 <= x < 8 and 0 <= y < 8:
-                            unavialableTiles[x][y] = True
+                    elif tileType == 4:  # pawn 
+                        if i - 1 >= 0 and j + 1 < 8:  # up-left
+                            avialableTiles[i-1][j+1] = False
+                        if i + 1 < 8 and j + 1 < 8:  # up-right
+                            avialableTiles[i+1][j+1] = False
 
-                elif tileType == 4:  # pawn 
-                    if i - 1 >= 0 and j + 1 < 8:  # up-left
-                        unavialableTiles[i-1][j+1] = True
-                    if i + 1 < 8 and j + 1 < 8:  # up-right
-                        unavialableTiles[i+1][j+1] = True
+                    elif tileType == 7:  # rook
+                        for dx, dy in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
+                            x, y = i + dx, j + dy
+                            while 0 <= x < 8 and 0 <= y < 8:
+                                avialableTiles[x][y] = False
+                                if self.tileStates[x][y] != 1:  # stop if blocked
+                                    break
+                                x += dx
+                                y += dy
 
-                elif tileType == 7:  # rook
-                    for dx, dy in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
-                        x, y = i + dx, j + dy
-                        while 0 <= x < 8 and 0 <= y < 8:
-                            unavialableTiles[x][y] = True
-                            if self.tileStates[x][y] != 1:  # stop if blocked
-                                break
-                            x += dx
-                            y += dy
+                    elif tileType == 6:  # queen 
+                        for dx, dy in [(-1, -1), (-1, 1), (1, -1), (1, 1),
+                                    (1, 0), (-1, 0), (0, 1), (0, -1)]:
+                            x, y = i + dx, j + dy
+                            while 0 <= x < 8 and 0 <= y < 8:
+                                avialableTiles[x][y] = False
+                                if self.tileStates[x][y] != 1:  # stop if blocked
+                                    break
+                                x += dx
+                                y += dy
+                
+                    #elif (tileType == 5):  #no logic needed for player yet
+                        
+            
+            
 
-                elif tileType == 6:  # queen 
-                    for dx, dy in [(-1, -1), (-1, 1), (1, -1), (1, 1),
-                                (1, 0), (-1, 0), (0, 1), (0, -1)]:
-                        x, y = i + dx, j + dy
-                        while 0 <= x < 8 and 0 <= y < 8:
-                            unavialableTiles[x][y] = True
-                            if self.tileStates[x][y] != 1:  # stop if blocked
-                                break
-                            x += dx
-                            y += dy
-                #no logic needed for player
+            allMoves = [[False for _ in range(8)] for _ in range(8)] 
+
+            shootingMoves = np.zeros(360//shootingDegree, dtype=bool)
+            degrees = [( np.round(np.cos(np.deg2rad(i*shootingDegree)), 2), np.round(np.sin(np.deg2rad(i*shootingDegree)), 2) ) for i in range(len(shootingMoves))]
+
+            '''for i in range(len(shootingMoves)):
+                print("degree:", i*shootingDegree, "cos:", degrees[i][0], "sin:", degrees[i][1])'''
+            #print(degrees)
+            #basic king movement:
+            for dx in [-1, 0, 1]:
+                for dy in [-1, 0, 1]:
+                    print(f"new dx{dx} dy{dy}")
+                    if dx == 0 and dy == 0:
+                        continue
+                    x, y = self.playerState[0] + dx, self.playerState[1] + dy
+                    if 0 <= x < 8 and 0 <= y < 8:
+                        # shape (n,2)
+                        allMoves[x][y] = True
+
+                        degreeMask = np.zeros(360//shootingDegree, dtype=bool)
+                        for i in range(360 // shootingDegree):
+                            vx, vy = degrees[i]
+                            # Compare signs of dx, dy with vx, vy
+                            if np.sign(vx) == np.sign(dx) and np.sign(vy) == np.sign(dy):
+                                degreeMask[i] = True
+                        #print(degreeMask)
+                        
+                        shootingMoves = np.bitwise_or(degreeMask, shootingMoves)
+                        #print(degreeMask)
+            print(shootingMoves)
+            print("player x, y: ", self.playerState[0], self.playerState[1])
+           
+            possibleMoves = np.bitwise_and(np.array(allMoves), np.array(avialableTiles)).flatten()
+            print(possibleMoves)
+            return np.concatenate((possibleMoves, shootingMoves))
+        else:
+            return -1
+
+            
+
 
 
         
