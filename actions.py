@@ -85,8 +85,12 @@ class actions():
             return True
         else:
             return False
-    def getActions(self, shootingDegree = 20):
-
+    def playState(state, shootingDegree = 15):
+        if(state < 63):#moving
+            x = state // 8
+            y = state % 8
+            
+    def getActions(self, shootingDegree = 15):
         if(not (self.detectDeath() or self.playerState == None)):
             avialableTiles = [[True for _ in range(8)] for _ in range(8)] 
             for i in range(8): 
