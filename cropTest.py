@@ -2,18 +2,21 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 print(cv2.__version__)
-img = cv2.imread("gameOverScreen.png")
-imgCrop = img[440: 1616, 880:2056]
+img = cv2.imread("winScreen.png")
+#imgCrop = img[440: 1616, 880:2056]
+imgCrop = img[1600: 1800, 1000:1900]
+plt.imshow(imgCrop)
+plt.show()
 #plt.imshow(img)
 
 
-channelsAmt = 3
+'''channelsAmt = 3
 tileWidth = (imgCrop.shape[0]//8)
 tileHeight = (imgCrop.shape[1]//8)
 
 tiles = imgCrop.reshape(8, (imgCrop.shape[0]//8), 8, (imgCrop.shape[1]//8), channelsAmt)
 tiles = tiles.transpose(0, 2, 1, 3, 4)
-tiles = tiles.reshape(64, (imgCrop.shape[0]//8), (imgCrop.shape[1]//8), channelsAmt)
+tiles = tiles.reshape(64, (imgCrop.shape[0]//8), (imgCrop.shape[1]//8), channelsAmt)'''
 
 
 '''
@@ -28,7 +31,7 @@ for i, ax in enumerate(axes.flat):
 plt.show()
 '''
 
-print(tiles[0].shape)
+#print(tiles[0].shape)
 #plt.imshow(tiles[0])
 #plt.show()
 

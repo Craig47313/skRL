@@ -20,10 +20,16 @@ class actions():
         net.eval()
         self.net = net
         self.gameOverScreen = cv2.imread("gameOverScreen.png")
+        self.winScreen = cv2.imread("winScreen.png")
         self.classes = ("bishop", "board", "king", "knight", "pawn", "player", "queen", "rook")
         self.spareAmmo = 6
-        self.currentAmmo = 2 
-        self.tileStates = [[1 for _ in range(8)] for _ in range(8)]
+        self.currentAmmo = 3
+        self.maxAmmo = 3
+        self.maxAmmoSpare = 6
+        self.tileStates = [[-1 for _ in range(8)] for _ in range(8)]
+        self.peiceAmts = [-1]*8
+        self.alive = True
+
     def createTiles(self, img):
         imgCrop = img[440: 1616, 880:2056]
         channelsAmt = 3
@@ -37,7 +43,7 @@ class actions():
         #print(tiles[0].shape)
         return tiles
     def getState(self):
-        screenshot = pyautogui.screenshot()
+        #screenshot = pyautogui.screenshot()
         #img = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
         img = cv2.imread("screenshot.png")
 
@@ -56,7 +62,7 @@ class actions():
         ])
         playerState = None
         tileStates = []
-
+        amts = [0]*8
         flatIdx = -1
         for i in range(8):#64 tiles
             row = []
@@ -70,27 +76,123 @@ class actions():
                     probabilities = torch.softmax(outputs, dim=1)
                     confidence, predicted = torch.max(probabilities, 1)
                     predInd = predicted.item()
+                    #print(predInd)
                     label = self.classes[predInd]
+                    amts[predInd]+=1
                     if(label == "player"):
+                        print("player at ", i, j)
                         playerState = (i, j)
                 row.append(predInd)
             tileStates.append(row)
-
+        self.lastPieceAmts = self.peiceAmts
+        self.peiceAmts = amts
         self.lastTiles = self.tileStates
         self.tileStates  =  tileStates
         self.playerState = playerState
-        return np.array(tileStates).flatten()
-    def detectDeath(self, threshold = 500):
-        if(np.mean((self.img.astype("float") - self.gameOverScreen.astype("float")) ** 2)) < threshold:#if mse b/t death img and that img is the same then infers is a death
+
+        return np.concatenate((self.currentAmmo, self.spareAmmo, np.array(tileStates).flatten()))
+    def getReward(self):
+        #remember ("bishop", "board", "king", "knight", "pawn", "player", "queen", "rook")
+        dBishops = self.lastPieceAmts[0] - self.peiceAmts[0]
+        deadKing = 30 if(self.peiceAmts[2] < 1 and self.detectDeath()) else 0
+        deadPlayer = -50 if(self.peiceAmts[5] < 1) else 0
+        dKnights = self.lastPieceAmts[3] - self.peiceAmts[3]
+        dPawns = self.lastPieceAmts[4] - self.peiceAmts[4]
+        dQueens = self.lastPieceAmts[6] - self.peiceAmts[6]
+        dRooks = self.lastPieceAmts[7] - self.peiceAmts[7]
+
+        return dPawns + dBishops*3 + dKnights*3 + dRooks*5 + dQueens*9 + deadKing + deadPlayer - 3
+    def detectWin(self, threshold = 500):
+        imgCrop = self.img[1600: 1800, 1000:1900]
+        winScreenCrop = self.winScreen[1600: 1800, 1000:1900]
+        if(np.mean((imgCrop.astype("float") - winScreenCrop.astype("float")) ** 2)) < threshold:#if mse b/t win img and img is the same then infers a win has happened
             return True
         else:
-            return False
-    def playState(state, shootingDegree = 15):
-        if(state < 63):#moving
+            return False   
+    def detectDeath(self, threshold = 500):
+        if(np.mean((self.img.astype("float") - self.gameOverScreen.astype("float")) ** 2)) < threshold:#if mse b/t death img and img is the same then infers is a death
+            return True
+        else:
+            self.alive = False
+            return False   
+    def playState(self, state, shootingDegree = 15):
+        if(not self.Actions[state]):
+            return -1
+        if(state == 0):
+            pyautogui.press('space')
+            if(self.currentAmmo < self.maxAmmo and self.spareAmmo > 0):
+                self.currentAmmo+=1
+                self.spareAmmo-=1
+            elif(self.currentAmmo == self.maxAmmo and self.spareAmmo < self.maxAmmoSpare):
+                self.spareAmmo+=1
+        elif(state < 65 and state > 1):#moving
             x = state // 8
             y = state % 8
+            pyautogui.click(478+(x*73), 730 - (y*73))
+            pyautogui.mouseDown()
+            pyautogui.mouseUp()
+            if(self.currentAmmo < self.maxAmmo and self.spareAmmo > 0):
+                self.currentAmmo+=1
+                self.spareAmmo-=1
+            elif(self.currentAmmo == self.maxAmmo and self.spareAmmo < self.maxAmmoSpare):
+                self.spareAmmo+=1
+            time.sleep(0.5)
+        else:
+            x = (state-65) // 8
+            y = (state-65) % 8
+            pyautogui.click(478+(x*73), 730 - (y*73))
+            pyautogui.mouseDown()
+            pyautogui.mouseUp()
+            time.sleep(0.5) 
+        return 0
+    def restart(didWin):
+        if(didWin):#restart after a win
+            print('clicking') 
+            pyautogui.mouseDown()#quicken the pieces breaking
+            pyautogui.mouseUp()
+            time.sleep(2.0)
+
+            pyautogui.click(600, 510)#click a modifier
+            pyautogui.mouseDown()
+            pyautogui.mouseUp()
+            time.sleep(2.0)
+
+            pyautogui.mouseDown()#quicken the pieces forming
+            pyautogui.mouseUp()
+            time.sleep(2.0)
+
+            pyautogui.keyDown('esc')#go into menu
+            pyautogui.keyUp('esc')
+
+            pyautogui.click(600, 720)#resign
+            pyautogui.mouseDown()
+            pyautogui.mouseUp()
+            pyautogui.mouseDown()
+            pyautogui.mouseUp()
+
+            pyautogui.mouseDown()#quicken resign screen
+            pyautogui.mouseUp()
+
+            pyautogui.click(600, 510)#click try again button
+            pyautogui.mouseDown()
+            pyautogui.mouseUp()
+            time.sleep(1.0)
+
+            pyautogui.mouseDown()#quicken pieces reforming
+            pyautogui.mouseUp()
+            time.sleep(2.0)
+        else:#restart after a loss
+            pyautogui.click(600, 510)
+            pyautogui.mouseDown()
+            pyautogui.mouseUp()
+            time.sleep(1.0)
+            pyautogui.mouseDown()
+            pyautogui.mouseUp()
+            time.sleep(1.0)
             
-    def getActions(self, shootingDegree = 15):
+
+            
+    def getActions(self):
         if(not (self.detectDeath() or self.playerState == None)):
             avialableTiles = [[True for _ in range(8)] for _ in range(8)] 
             for i in range(8): 
@@ -163,39 +265,40 @@ class actions():
 
             allMoves = [[False for _ in range(8)] for _ in range(8)] 
 
-            shootingMoves = np.zeros(360//shootingDegree, dtype=bool)
-            degrees = [( np.round(np.cos(np.deg2rad(i*shootingDegree)), 2), np.round(np.sin(np.deg2rad(i*shootingDegree)), 2) ) for i in range(len(shootingMoves))]
+            shootingMoves = [[True for _ in range(8)] for _ in range(8)] 
 
-            '''for i in range(len(shootingMoves)):
-                print("degree:", i*shootingDegree, "cos:", degrees[i][0], "sin:", degrees[i][1])'''
-            #print(degrees)
             #basic king movement:
             for dx in [-1, 0, 1]:
                 for dy in [-1, 0, 1]:
-                    print(f"new dx{dx} dy{dy}")
+                    #print(f"new dx{dx} dy{dy}")
                     if dx == 0 and dy == 0:
                         continue
                     x, y = self.playerState[0] + dx, self.playerState[1] + dy
                     if 0 <= x < 8 and 0 <= y < 8:
                         # shape (n,2)
                         allMoves[x][y] = True
+            for x in range(8):
+                for y in range(8):
+                    if(allMoves[x][y]):#cant shoot if you can move to a tile
+                        shootingMoves[x][y] = False
+                    if(self.tileStates[x][y] != 1 and self.tileStates[x][y] != 2):#override if there is a piece on that tile
+                        shootingMoves[x][y] = True
 
-                        degreeMask = np.zeros(360//shootingDegree, dtype=bool)
-                        for i in range(360 // shootingDegree):
-                            vx, vy = degrees[i]
-                            # Compare signs of dx, dy with vx, vy
-                            if np.sign(vx) == np.sign(dx) and np.sign(vy) == np.sign(dy):
-                                degreeMask[i] = True
-                        #print(degreeMask)
-                        
-                        shootingMoves = np.bitwise_or(degreeMask, shootingMoves)
-                        #print(degreeMask)
-            print(shootingMoves)
-            print("player x, y: ", self.playerState[0], self.playerState[1])
+
+            #print("shooting moves: ")
+            #print(shootingMoves)
+            #print("player x, y: ", self.playerState[0], self.playerState[1])
            
             possibleMoves = np.bitwise_and(np.array(allMoves), np.array(avialableTiles)).flatten()
-            print(possibleMoves)
-            return np.concatenate((possibleMoves, shootingMoves))
+            #print("possible moves")
+            #print(possibleMoves)
+
+            canReload = self.spareAmmo > 0 and self.currentAmmo < self.maxAmmo
+            reload = np.zeros(1, dtype=bool)
+            if(canReload):
+                reload = np.ones(1, dtype=bool)
+            self.Actions = np.concatenate([reload, possibleMoves, np.array(shootingMoves).flatten()])
+            return self.Actions#first state is reload (spacebar)
         else:
             return -1
 

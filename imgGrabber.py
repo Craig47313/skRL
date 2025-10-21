@@ -56,8 +56,8 @@ def createTiles(img):
     tiles = imgCrop.reshape(8, tileWidth, 8, tileHeight, channelsAmt)
     tiles = tiles.transpose(0, 2, 1, 3, 4)
     tiles = tiles.reshape(64, tileWidth, tileHeight, channelsAmt)
-    print('shape of tiles when creating')
-    print(tiles[0].shape)
+    #print('shape of tiles when creating')
+    #print(tiles[0].shape)
     return tiles
 
 def save_tiles(tiles, save_dir, screenshotId):
@@ -65,8 +65,8 @@ def save_tiles(tiles, save_dir, screenshotId):
         tile = tiles[i]
         fname = os.path.join(save_dir, f"tile_{i}_{screenshotId}.png")
         cv2.imwrite(fname, tile)
-    print('shape of tiles when saving')
-    print(tiles[0].shape)
+    #print('shape of tiles when saving')
+    #print(tiles[0].shape)
     print("Screenshot id: " + screenshotId)
 def show_tiles(tiles, classes = ("bishop", "board", "king", "knight", "pawn", "player", "queen", "rook")):
     # tiles.shape = (64, 147, 147, 3)
@@ -117,6 +117,7 @@ while runProgram:
     if screenshot_done:
         screenshot = pyautogui.screenshot()
         img = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
+        #cv2.imwrite("winScreen.png", img)
         tiles = createTiles(img)
         if(show_window):
             if(displayType == 'tile'):
