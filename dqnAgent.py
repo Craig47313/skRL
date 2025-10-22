@@ -38,13 +38,20 @@ class DQNAgent:
     def remember(self, s, a, r, s2, done):
         self.memory.append((s, a, r, s2, done))
 
-    def act(self, state):
-        if random.random() < self.epsilon:
-            return random.randrange(self.action_size)
-        state = torch.FloatTensor(state).unsqueeze(0)
+    def act(self, state, possibleStates):
+        if random.random() < self.epsilon: #do smth random
+            valid_actions = torch.nonzero(torch.tensor(possibleStates)).flatten()
+            return valid_actions[torch.randint(len(valid_actions), (1,))].item()
+
+        state_t = torch.FloatTensor(state).unsqueeze(0)     
         with torch.no_grad():
-            q_values = self.model(state)
-        return q_values.argmax().item()
+            q_values = self.model(state_t).squeeze(0)   
+
+        # Mask invalid actions all at once (vectorized)
+        mask = torch.tensor(possibleStates, dtype=torch.bool)
+        q_values[~mask] = float('-inf')
+
+        return torch.argmax(q_values).item()
 
     def replay(self, batch_size):
         if len(self.memory) < batch_size:

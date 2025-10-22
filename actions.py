@@ -26,9 +26,14 @@ class actions():
         self.currentAmmo = 3
         self.maxAmmo = 3
         self.maxAmmoSpare = 6
-        self.tileStates = [[-1 for _ in range(8)] for _ in range(8)]
-        self.peiceAmts = [-1]*8
+        self.tileStates = None
+        self.peiceAmts = None
         self.alive = True
+        self.actionSize = 1 + 64 + 64 #reload, move, shoot
+        self.stateSize = 1 + 1 + 64 #num bullets in shotgun and num remaining + state of all the tiles
+        self.state = None
+        self.lastState = None
+        self.getState() 
 
     def createTiles(self, img):
         imgCrop = img[440: 1616, 880:2056]
@@ -89,19 +94,23 @@ class actions():
         self.lastTiles = self.tileStates
         self.tileStates  =  tileStates
         self.playerState = playerState
+        self.lastState = self.state
+        self.state = np.concatenate((self.currentAmmo, self.spareAmmo, np.array(tileStates).flatten()))
 
-        return np.concatenate((self.currentAmmo, self.spareAmmo, np.array(tileStates).flatten()))
+        return self.state
     def getReward(self):
         #remember ("bishop", "board", "king", "knight", "pawn", "player", "queen", "rook")
         dBishops = self.lastPieceAmts[0] - self.peiceAmts[0]
-        deadKing = 30 if(self.peiceAmts[2] < 1 and self.detectDeath()) else 0
-        deadPlayer = -50 if(self.peiceAmts[5] < 1) else 0
+        deadKing = 30 if(self.detectWin()) else 0
+        deadPlayer = -50 if(self.detectDeath()) else 0
         dKnights = self.lastPieceAmts[3] - self.peiceAmts[3]
         dPawns = self.lastPieceAmts[4] - self.peiceAmts[4]
         dQueens = self.lastPieceAmts[6] - self.peiceAmts[6]
         dRooks = self.lastPieceAmts[7] - self.peiceAmts[7]
 
-        return dPawns + dBishops*3 + dKnights*3 + dRooks*5 + dQueens*9 + deadKing + deadPlayer - 3
+        done = (deadKing != 0 or deadPlayer != 0)
+
+        return (dPawns + dBishops*3 + dKnights*3 + dRooks*5 + dQueens*9 + deadKing + deadPlayer - 3), done
     def detectWin(self, threshold = 500):
         imgCrop = self.img[1600: 1800, 1000:1900]
         winScreenCrop = self.winScreen[1600: 1800, 1000:1900]
@@ -115,7 +124,7 @@ class actions():
         else:
             self.alive = False
             return False   
-    def playState(self, state, shootingDegree = 15):
+    def act(self, state):
         if(not self.Actions[state]):
             return -1
         if(state == 0):
@@ -301,6 +310,15 @@ class actions():
             return self.Actions#first state is reload (spacebar)
         else:
             return -1
+    def step(self, action):
+        self.act(action)
+        reward, done = self.getReward()
+        nextState = self.getState()
+        return reward, done, nextState
+        
+
+
+
 
             
 
