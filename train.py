@@ -6,7 +6,7 @@ from actions import actions
 from dqnAgent import DQNAgent
 from pynput import keyboard
 from datetime import datetime
-
+import time
 def get_latest_model_path(models_dir="models"):
     model_files = glob.glob(os.path.join(models_dir, "model_*.pth"))
     if not model_files:
@@ -29,7 +29,19 @@ class KeyboardController:
             
     def is_exit_requested(self):
         return self.should_exit
+def endWait(key):
+    global waiting
+    try:
+        if(key.char == 'c'):
+            waiting = False
+    except:
+        pass
 def train():
+    waiting = True
+    listener = keyboard.Listener(on_press=endWait)
+    listener.start()
+    while waiting:
+        time.sleep(0.1)
     print("train running")
     actor = actions()
     agent = DQNAgent(actions.actionSize, actions.stateSize)
@@ -50,9 +62,12 @@ def train():
     episodes = 10000
     batch_size = 32
 
+
     for ep in range(episodes):
         if controller.is_exit_requested():
             print("Training interrupted by user.")
+            global running 
+            running = False
             break
 
         state = actor.getState()
@@ -77,6 +92,7 @@ def train():
             with open(os.path.join("models", f"meta_{timestamp}.json"), "w") as f:
                 json.dump({"epsilon": agent.epsilon}, f)
             print(f"Model and epsilon saved to {model_path}")
+
 
 if __name__ == "__main__":
     train()

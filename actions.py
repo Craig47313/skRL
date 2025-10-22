@@ -48,9 +48,9 @@ class actions():
         #print(tiles[0].shape)
         return tiles
     def getState(self):
-        #screenshot = pyautogui.screenshot()
-        #img = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
-        img = cv2.imread("screenshot.png")
+        screenshot = pyautogui.screenshot()
+        img = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
+        #img = cv2.imread("screenshot.png")
 
         self.img = img
 
@@ -101,16 +101,17 @@ class actions():
     def getReward(self):
         #remember ("bishop", "board", "king", "knight", "pawn", "player", "queen", "rook")
         dBishops = self.lastPieceAmts[0] - self.peiceAmts[0]
-        deadKing = 30 if(self.detectWin()) else 0
-        deadPlayer = -50 if(self.detectDeath()) else 0
+        deadKing = 30 if(self.detectWin() or self.peiceAmts[2] == 0) else 0
+        deadPlayer = -50 if(self.detectDeath() or self.peiceAmts[5]==0) else 0
         dKnights = self.lastPieceAmts[3] - self.peiceAmts[3]
         dPawns = self.lastPieceAmts[4] - self.peiceAmts[4]
         dQueens = self.lastPieceAmts[6] - self.peiceAmts[6]
         dRooks = self.lastPieceAmts[7] - self.peiceAmts[7]
 
         done = (deadKing != 0 or deadPlayer != 0)
+        win = deadKing != 0
 
-        return (dPawns + dBishops*3 + dKnights*3 + dRooks*5 + dQueens*9 + deadKing + deadPlayer - 3), done
+        return (dPawns + dBishops*3 + dKnights*3 + dRooks*5 + dQueens*9 + deadKing + deadPlayer - 3), done, win
     def detectWin(self, threshold = 500):
         imgCrop = self.img[1600: 1800, 1000:1900]
         winScreenCrop = self.winScreen[1600: 1800, 1000:1900]
@@ -312,8 +313,10 @@ class actions():
             return -1
     def step(self, action):
         self.act(action)
-        reward, done = self.getReward()
         nextState = self.getState()
+        reward, done, win = self.getReward()
+        if(done):
+            self.restart(win)
         return reward, done, nextState
         
 
