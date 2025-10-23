@@ -37,14 +37,17 @@ def endWait(key):
     except:
         pass
 def train():
+    global waiting
     waiting = True
     listener = keyboard.Listener(on_press=endWait)
     listener.start()
+    print("waiting for key c to be pressed to start training")
     while waiting:
         time.sleep(0.1)
+    
     print("train running")
-    actor = actions()
-    agent = DQNAgent(actions.actionSize, actions.stateSize)
+    actor = actions(False)
+    agent = DQNAgent(actor.actionSize, actor.stateSize)
     os.makedirs("models", exist_ok=True)
 
     # Load latest model if available
@@ -66,21 +69,35 @@ def train():
     for ep in range(episodes):
         if controller.is_exit_requested():
             print("Training interrupted by user.")
-            global running 
-            running = False
             break
 
         state = actor.getState()
         print(f"Episode {ep + 1} starting. Epsilon: {agent.epsilon:.3f}")  # <-- Add this line
         total_reward = 0
         done = False
-        while not done:
-            action = agent.act(state)
-            reward, done, nextState = actor.step(action)
-            agent.remember(state, action, reward, nextState, done)
+        while (not done):
+            if controller.is_exit_requested():
+                print("Training interrupted by user.")
+                break
+            print("state: ", state)
+
+            possibleStates = actor.getActions() #get possible states
+
+            allActions = ""
+            for i in range(len(possibleStates)):
+                allActions += (str(i) + " " + str(possibleStates[i]) + " | ")
+            print(allActions) #print all possible actions
+            
+            action = agent.act(state, possibleStates) #get the dqn's decided action
+            print(f"actions is state {action} ammo is {actor.currentAmmo}")
+
+            reward, done, nextState = actor.step(action) #do the action and get reward and if it is done
+
+            agent.remember(state, action, reward, nextState, done) #dqn remembers
             agent.replay(batch_size)
             state = nextState
             total_reward += reward
+            print("\n\n")
         print(f"Episode {ep + 1}: Total Reward = {total_reward:.2f}, Epsilon = {agent.epsilon:.3f}")
 
         if ep % 10 == 0:

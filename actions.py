@@ -10,9 +10,9 @@ from torchvision import models, transforms
 from PIL import Image
 
 class actions():
-    def __init__(self):
+    def __init__(self, test):
         self.enemyPos = []
-
+        self.test = test
         net = models.resnet18(weights=None)
         num_ftrs = net.fc.in_features
         net.fc = nn.Linear(num_ftrs, 8)  
@@ -23,8 +23,8 @@ class actions():
         self.winScreen = cv2.imread("winScreen.png")
         self.classes = ("bishop", "board", "king", "knight", "pawn", "player", "queen", "rook")
         self.spareAmmo = 6
-        self.currentAmmo = 3
-        self.maxAmmo = 3
+        self.currentAmmo = 2
+        self.maxAmmo = 2
         self.maxAmmoSpare = 6
         self.tileStates = None
         self.peiceAmts = None
@@ -33,7 +33,7 @@ class actions():
         self.stateSize = 1 + 1 + 64 #num bullets in shotgun and num remaining + state of all the tiles
         self.state = None
         self.lastState = None
-        self.getState() 
+        #self.getState() 
 
     def createTiles(self, img):
         imgCrop = img[440: 1616, 880:2056]
@@ -48,9 +48,12 @@ class actions():
         #print(tiles[0].shape)
         return tiles
     def getState(self):
-        screenshot = pyautogui.screenshot()
-        img = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
-        #img = cv2.imread("screenshot.png")
+        if(not self.test):    
+            screenshot = pyautogui.screenshot()
+            img = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
+        else:
+            print("using test screenshot not real training")
+            img = cv2.imread("screenshot.png")
 
         self.img = img
 
@@ -85,6 +88,10 @@ class actions():
                     label = self.classes[predInd]
                     amts[predInd]+=1
                     if(label == "player"):
+                        os.makedirs("detected_players", exist_ok=True)
+                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                        fname = os.path.join('detected_players', f"{timestamp}_({i}_{j}).png")
+                        cv2.imwrite(fname, tiles[flatIdx])
                         print("player at ", i, j)
                         playerState = (i, j)
                 row.append(predInd)
@@ -95,7 +102,7 @@ class actions():
         self.tileStates  =  tileStates
         self.playerState = playerState
         self.lastState = self.state
-        self.state = np.concatenate((self.currentAmmo, self.spareAmmo, np.array(tileStates).flatten()))
+        self.state = np.concatenate((np.array([self.currentAmmo]), np.array([self.spareAmmo]), np.array(tileStates).flatten()))
 
         return self.state
     def getReward(self):
@@ -130,34 +137,40 @@ class actions():
             return -1
         if(state == 0):
             pyautogui.press('space')
-            if(self.currentAmmo < self.maxAmmo and self.spareAmmo > 0):
-                self.currentAmmo+=1
-                self.spareAmmo-=1
-            elif(self.currentAmmo == self.maxAmmo and self.spareAmmo < self.maxAmmoSpare):
-                self.spareAmmo+=1
+            while(self.currentAmmo < self.maxAmmo and self.spareAmmo > 0):
+                self.spareAmmo -= 1
+                self.currentAmmo += 1
         elif(state < 65 and state > 1):#moving
-            x = state // 8
-            y = state % 8
+            x = ((state) % 8)-1
+            y = 7-((state) // 8)
+            print(f"x, y: {x}, {y}")
             pyautogui.click(478+(x*73), 730 - (y*73))
             pyautogui.mouseDown()
             pyautogui.mouseUp()
+
             if(self.currentAmmo < self.maxAmmo and self.spareAmmo > 0):
-                self.currentAmmo+=1
-                self.spareAmmo-=1
-            elif(self.currentAmmo == self.maxAmmo and self.spareAmmo < self.maxAmmoSpare):
+                while(self.currentAmmo < self.maxAmmo and self.spareAmmo > 0):
+                    self.spareAmmo -= 1
+                    self.currentAmmo += 1
+            elif(self.spareAmmo < self.maxAmmoSpare):
                 self.spareAmmo+=1
+
             time.sleep(0.5)
         else:
-            x = (state-65) // 8
-            y = (state-65) % 8
+            x = ((state-65) % 8)
+            y = 7-((state-65) // 8)
+            print(f"x, y: {x}, {y}")
             pyautogui.click(478+(x*73), 730 - (y*73))
             pyautogui.mouseDown()
             pyautogui.mouseUp()
+
+            self.currentAmmo -= 1
+
             time.sleep(0.5) 
         return 0
-    def restart(didWin):
+    def restart(self, didWin):
         if(didWin):#restart after a win
-            print('clicking') 
+            print('restarting') 
             pyautogui.mouseDown()#quicken the pieces breaking
             pyautogui.mouseUp()
             time.sleep(2.0)
@@ -275,7 +288,7 @@ class actions():
 
             allMoves = [[False for _ in range(8)] for _ in range(8)] 
 
-            shootingMoves = [[True for _ in range(8)] for _ in range(8)] 
+            shootingMoves = [[False for _ in range(8)] for _ in range(8)] 
 
             #basic king movement:
             for dx in [-1, 0, 1]:
@@ -289,9 +302,7 @@ class actions():
                         allMoves[x][y] = True
             for x in range(8):
                 for y in range(8):
-                    if(allMoves[x][y]):#cant shoot if you can move to a tile
-                        shootingMoves[x][y] = False
-                    if(self.tileStates[x][y] != 1 and self.tileStates[x][y] != 2):#override if there is a piece on that tile
+                    if(self.tileStates[x][y] != 1 and self.tileStates[x][y] != 5):#shoot if there is a piece on that tile
                         shootingMoves[x][y] = True
 
 
@@ -307,7 +318,17 @@ class actions():
             reload = np.zeros(1, dtype=bool)
             if(canReload):
                 reload = np.ones(1, dtype=bool)
-            self.Actions = np.concatenate([reload, possibleMoves, np.array(shootingMoves).flatten()])
+            
+            if(self.currentAmmo == 0):
+                shootingMoves = np.zeros(64, dtype=bool)
+            else:
+                #print("shootingMoves: ")
+                #print(shootingMoves)
+                shootingMoves = np.array(shootingMoves).flatten()
+                #print(shootingMoves)
+                
+            
+            self.Actions = np.concatenate([reload, possibleMoves, shootingMoves])
             return self.Actions#first state is reload (spacebar)
         else:
             return -1
