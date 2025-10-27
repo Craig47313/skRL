@@ -15,15 +15,35 @@ global te
 te = actions(True)
 te.getState()
 
-print("tile states: ")
-print(te.tileStates)
+'''print("tile states: ")
+print(te.tileStates)'''
 
 possibleActions = te.getActions()
-allActions = ""
+'''allActions = ""
 for i in range(len(possibleActions)):
-    allActions += (i + " " + possibleActions[i] + " | ")
-print(allActions)
+    allActions += (str(i) + " " + str(possibleActions[i]) + " | ")
+print(allActions)'''
 
+def clickAll():
+    for state in range(1, 129):
+        print(str(state))
+        if(state < 65 and state >= 1):#moving
+            x = ((state-1) % 8)
+            y = 7-((state-1) // 8)
+            #print(f"x, y: {x}, {y}")
+            pyautogui.click(478+(x*73), 730 - (y*73))
+            #pyautogui.mouseDown()
+            #pyautogui.mouseUp()
+
+        else:
+            x = ((state-65) % 8)
+            y = 7-((state-65) // 8)
+            #print(f"x, y: {x}, {y}")
+            pyautogui.click(478+(x*73), 730 - (y*73))
+            pyautogui.mouseDown()
+            pyautogui.mouseUp()
+
+        time.sleep(0.1) 
 
 global waiting
 waiting = True
@@ -36,7 +56,11 @@ def click(key):
         if(key.char == 'c'):
             print('clicking') 
             te.act(state)
-            waiting = False          
+            waiting = False
+        if(key.char == 'a'):
+            print('clicking') 
+            clickAll()
+            waiting = False 
     except:
         pass
 

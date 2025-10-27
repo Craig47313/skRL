@@ -29,7 +29,7 @@ class actions():
         self.tileStates = None
         self.peiceAmts = None
         self.alive = True
-        self.actionSize = 1 + 64 + 64 #reload, move, shoot
+        self.actionSize = 1 + 64 + 64 + 1 #reload, move, shoot, void (there are no possible actions so just reload 3 times so you die)
         self.stateSize = 1 + 1 + 64 #num bullets in shotgun and num remaining + state of all the tiles
         self.state = None
         self.lastState = None
@@ -47,8 +47,11 @@ class actions():
         #print('shape of tiles when creating')
         #print(tiles[0].shape)
         return tiles
-    def getState(self):
-        if(not self.test):    
+    def getState(self, redo = False, minConf = 0.0):
+        os.makedirs("detected_kings", exist_ok=True)
+        os.makedirs("detected_players", exist_ok=True)
+        if(not self.test):  
+            pyautogui.click(100,100) #gets rid of aiming crosshair so that tile recognition algorithm works better
             screenshot = pyautogui.screenshot()
             img = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
         else:
@@ -69,6 +72,15 @@ class actions():
                             std=[0.229, 0.224, 0.225])
         ])
         playerState = None
+
+        playerFound = False
+        kingFound = False
+
+        err = False
+
+        if(self.test): # to see what a reasonable minConf value should be on a redo --> lowest on screenshot.png is 0.9101 so will set minConf on redo to be 0.85
+            lowestConf = 1.1 # conf values max at 1 so they have to be less than 1.1
+
         tileStates = []
         amts = [0]*8
         flatIdx = -1
@@ -83,28 +95,50 @@ class actions():
                     outputs = self.net(img_t)
                     probabilities = torch.softmax(outputs, dim=1)
                     confidence, predicted = torch.max(probabilities, 1)
+                    if(self.test):
+                        if(confidence < lowestConf):
+                            lowestConf = confidence
+                    if(confidence < minConf): err = True
                     predInd = predicted.item()
                     #print(predInd)
                     label = self.classes[predInd]
                     amts[predInd]+=1
                     if(label == "player"):
-                        os.makedirs("detected_players", exist_ok=True)
-                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                        fname = os.path.join('detected_players', f"{timestamp}_({i}_{j}).png")
-                        cv2.imwrite(fname, tiles[flatIdx])
-                        print("player at ", i, j)
+                        if(playerFound): err = True
+                        playerFound = True
+                        print(f"player detected at {i}, {j} | confidence: {confidence}")
+                        if(not self.test): #don't collect data if in testing 
+                            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                            fname = os.path.join('detected_players', f"{timestamp}_({i}_{j}).png")
+                            cv2.imwrite(fname, tiles[flatIdx])
                         playerState = (i, j)
+                    elif(label == "king"):
+                        if(kingFound): err = True
+                        kingFound = True
+                        print(f"king detected at {i}, {j} | confidence: {confidence}") 
+                        if(not self.test): #don't collect data if in testing               
+                            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                            fname = os.path.join("detected_kings", f"{timestamp}_({i}_{j}).png")
+                            cv2.imwrite(fname, tiles[flatIdx])
                 row.append(predInd)
             tileStates.append(row)
-        self.lastPieceAmts = self.peiceAmts
+        
+        print(f"player state: {playerState}")
+        if(not redo): # dont set what happened last time if it's a redo
+            self.lastPieceAmts = self.peiceAmts
+            self.lastTiles = self.tileStates
+            self.lastState = self.state
+        
+        if(self.test):
+            print(f"lowest confidence: {lowestConf}")
+        
         self.peiceAmts = amts
-        self.lastTiles = self.tileStates
         self.tileStates  =  tileStates
         self.playerState = playerState
-        self.lastState = self.state
+        if((not (kingFound and playerFound)) or err == True): return -1
         self.state = np.concatenate((np.array([self.currentAmmo]), np.array([self.spareAmmo]), np.array(tileStates).flatten()))
 
-        return self.state
+        return 0
     def getReward(self):
         #remember ("bishop", "board", "king", "knight", "pawn", "player", "queen", "rook")
         dBishops = self.lastPieceAmts[0] - self.peiceAmts[0]
@@ -133,16 +167,16 @@ class actions():
             self.alive = False
             return False   
     def act(self, state):
-        if(not self.Actions[state]):
+        if(not self.Actions[state] and not self.test):
             return -1
         if(state == 0):
             pyautogui.press('space')
             while(self.currentAmmo < self.maxAmmo and self.spareAmmo > 0):
                 self.spareAmmo -= 1
                 self.currentAmmo += 1
-        elif(state < 65 and state > 1):#moving
-            x = ((state) % 8)-1
-            y = 7-((state) // 8)
+        elif(state < 65 and state >= 1):#moving
+            x = ((state-1) % 8)
+            y = 7-((state-1) // 8)
             print(f"x, y: {x}, {y}")
             pyautogui.click(478+(x*73), 730 - (y*73))
             pyautogui.mouseDown()
@@ -156,7 +190,7 @@ class actions():
                 self.spareAmmo+=1
 
             time.sleep(0.5)
-        else:
+        elif(state >= 65 and state != 129):
             x = ((state-65) % 8)
             y = 7-((state-65) // 8)
             print(f"x, y: {x}, {y}")
@@ -167,6 +201,12 @@ class actions():
             self.currentAmmo -= 1
 
             time.sleep(0.5) 
+        else: # state == 129, <-- no possible actions so just try to reload to trigger death
+            pyautogui.press('space')
+            pyautogui.press('space')
+            pyautogui.press('space')
+            pyautogui.press('space')
+            
         return 0
     def restart(self, didWin):
         if(didWin):#restart after a win
@@ -225,15 +265,15 @@ class actions():
 
                     if tileType == 1:  # board 
                         continue
-                    else:
-                        avialableTiles[i][j] = False  #can't move to occupied
+                    elif(tileType != 5): # don't change so can check if players tile is being attacked
+                        avialableTiles[i][j] = False # can't move to occupied space
 
                     if tileType == 0:  # bishop
                         for dx, dy in [(-1, -1), (-1, 1), (1, -1), (1, 1)]:
                             x, y = i + dx, j + dy
                             while 0 <= x < 8 and 0 <= y < 8:
                                 avialableTiles[x][y] = False
-                                if self.tileStates[x][y] != 1:  # stop if blocked
+                                if self.tileStates[x][y] != 1:  #stop if blocked
                                     break
                                 x += dx
                                 y += dy
@@ -265,7 +305,7 @@ class actions():
                             x, y = i + dx, j + dy
                             while 0 <= x < 8 and 0 <= y < 8:
                                 avialableTiles[x][y] = False
-                                if self.tileStates[x][y] != 1:  # stop if blocked
+                                if self.tileStates[x][y] != 1:  #stop if blocked
                                     break
                                 x += dx
                                 y += dy
@@ -276,15 +316,13 @@ class actions():
                             x, y = i + dx, j + dy
                             while 0 <= x < 8 and 0 <= y < 8:
                                 avialableTiles[x][y] = False
-                                if self.tileStates[x][y] != 1:  # stop if blocked
+                                if self.tileStates[x][y] != 1:  #stop if blocked
                                     break
                                 x += dx
-                                y += dy
-                
-                    #elif (tileType == 5):  #no logic needed for player yet
-                        
-            
-            
+                                y += dy   
+                    #elif (tileType == 5):  #no logic needed for player
+
+            playerIsSafe = avialableTiles[self.playerState[0],self.playerState[1]]
 
             allMoves = [[False for _ in range(8)] for _ in range(8)] 
 
@@ -294,7 +332,7 @@ class actions():
             for dx in [-1, 0, 1]:
                 for dy in [-1, 0, 1]:
                     #print(f"new dx{dx} dy{dy}")
-                    if dx == 0 and dy == 0:
+                    if dx == 0 and dy == 0: # can't move to where you already are
                         continue
                     x, y = self.playerState[0] + dx, self.playerState[1] + dy
                     if 0 <= x < 8 and 0 <= y < 8:
@@ -316,29 +354,49 @@ class actions():
 
             canReload = self.spareAmmo > 0 and self.currentAmmo < self.maxAmmo
             reload = np.zeros(1, dtype=bool)
-            if(canReload):
+            if(canReload and playerIsSafe):
                 reload = np.ones(1, dtype=bool)
             
-            if(self.currentAmmo == 0):
+            if(self.currentAmmo == 0 or not playerIsSafe):
                 shootingMoves = np.zeros(64, dtype=bool)
             else:
                 #print("shootingMoves: ")
                 #print(shootingMoves)
                 shootingMoves = np.array(shootingMoves).flatten()
                 #print(shootingMoves)
-                
-            
-            self.Actions = np.concatenate([reload, possibleMoves, shootingMoves])
+            possibleActions = np.concatenate([reload, possibleMoves, shootingMoves])
+
+            #have an extra action at the end which is only avail if there are no possible real actions <-- will just reload to trigger death
+            if(not any(possibleActions)):
+                possibleActions = np.concatenate([possibleActions, np.ones(1, dtype=bool)])
+            else:
+                possibleActions = np.concatenate([possibleActions, np.zeros(1, dtype=bool)])
+
+
+            self.Actions = possibleActions
             return self.Actions#first state is reload (spacebar)
         else:
             return -1
     def step(self, action):
+        print("preforming act(action)")
         self.act(action)
-        nextState = self.getState()
+        returnCode = 0
+        print("preforming getState()")
+        if(self.getState()==-1):# err (multiple players or kings found)
+            time.sleep(0.5)
+            print("retrying getState()")
+            if(self.getState(redo=True, minConf=0.9) == -1):
+                print("retry unsuccesful, ending training")            
+                returnCode = -1
+            else:
+                print("retry successful, continuing")   
+                returnCode = 2
+        print("preforming getReward()")
         reward, done, win = self.getReward()
         if(done):
+            print(f"Restarting game, win?: {win}")
             self.restart(win)
-        return reward, done, nextState
+        return returnCode, reward, done, self.state
         
 
 

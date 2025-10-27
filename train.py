@@ -24,9 +24,12 @@ class KeyboardController:
             if key.char == 'q':
                 print("\nShutdown requested - cleaning up...")
                 self.should_exit = True
+                global errorCode
+                errorCode = 1
         except AttributeError:
             pass  # Special key pressed
-            
+    def set_exit(self, should_exit):
+        self.should_exit = should_exit
     def is_exit_requested(self):
         return self.should_exit
 def endWait(key):
@@ -36,8 +39,10 @@ def endWait(key):
             waiting = False
     except:
         pass
-def train():
+def train(printActions = False):
     global waiting
+    global errorCode
+    errorCode = 0
     waiting = True
     listener = keyboard.Listener(on_press=endWait)
     listener.start()
@@ -71,7 +76,15 @@ def train():
             print("Training interrupted by user.")
             break
 
-        state = actor.getState()
+        if(actor.getState()==-1):# err (multiple players or kings found)
+            time.sleep(0.5)
+            if(actor.getState(redo=True, minConf=0.85) == -1):
+                controller.set_exit(True)
+                break
+            
+        
+
+        state = actor.state
         print(f"Episode {ep + 1} starting. Epsilon: {agent.epsilon:.3f}")  # <-- Add this line
         total_reward = 0
         done = False
@@ -81,23 +94,34 @@ def train():
                 break
             print("state: ", state)
 
+            print("preforming getActions()")
             possibleStates = actor.getActions() #get possible states
-
-            allActions = ""
-            for i in range(len(possibleStates)):
-                allActions += (str(i) + " " + str(possibleStates[i]) + " | ")
-            print(allActions) #print all possible actions
             
+            if(printActions == True):
+                allActions = ""
+                for i in range(len(possibleStates)):
+                    allActions += (str(i) + " " + str(possibleStates[i]) + " | ")
+                print("all actions: " + allActions) #print all possible actions
+            
+            print("preforming agent.act(state, possibleStates)")
             action = agent.act(state, possibleStates) #get the dqn's decided action
             print(f"actions is state {action} ammo is {actor.currentAmmo}")
 
-            reward, done, nextState = actor.step(action) #do the action and get reward and if it is done
+            print("preforming actor.step(action)")
+            returnCode, reward, done, nextState = actor.step(action) #do the action and get reward and if it is done  
 
+            print("preforming agent.remember()")
             agent.remember(state, action, reward, nextState, done) #dqn remembers
+            print("preforming agent.replay()")
             agent.replay(batch_size)
             state = nextState
             total_reward += reward
             print("\n\n")
+            if(returnCode == -1):
+                errorCode = -1
+                controller.set_exit(True)
+                break
+            print("end of action cycle")
         print(f"Episode {ep + 1}: Total Reward = {total_reward:.2f}, Epsilon = {agent.epsilon:.3f}")
 
         if ep % 10 == 0:
@@ -109,7 +133,7 @@ def train():
             with open(os.path.join("models", f"meta_{timestamp}.json"), "w") as f:
                 json.dump({"epsilon": agent.epsilon}, f)
             print(f"Model and epsilon saved to {model_path}")
-
+    os.system(f'osascript -e \'display notification "Training ended with code {errorCode}" with title "skBot"\'')
 
 if __name__ == "__main__":
     train()
