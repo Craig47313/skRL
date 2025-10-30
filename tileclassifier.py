@@ -27,6 +27,7 @@ import numpy as np
 from torch.utils.data import random_split
 from torch.utils.data import DataLoader
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+from torchvision.models import ResNet18_Weights 
 
 device = torch.device("cpu")
 if torch.cuda.is_available():
@@ -67,7 +68,7 @@ import os
 import certifi
 os.environ['SSL_CERT_FILE'] = certifi.where() #need an ssl certificate to work and python not working to give one
 
-net = models.resnet18(pretrained=True)
+net = models.resnet18(weights=ResNet18_Weights.DEFAULT)
 net.fc = nn.Linear(net.fc.in_features, len(classes))
 net = net.to(device)
 
@@ -119,6 +120,7 @@ def view_classification(image, probabilities):
     ax2.set_title('Class Probability')
     ax2.set_xlim(0, 1.1)
     plt.tight_layout()
+    plt.show()
 
 print("Test 10 images")
 images, _ = next(iter(test_loader))

@@ -50,6 +50,7 @@ class actions():
     def getState(self, redo = False, minConf = 0.0):
         os.makedirs("detected_kings", exist_ok=True)
         os.makedirs("detected_players", exist_ok=True)
+        os.makedirs("low_conf_tiles", exist_ok=True)
         if(not self.test):  
             pyautogui.click(100,100) #gets rid of aiming crosshair so that tile recognition algorithm works better
             screenshot = pyautogui.screenshot()
@@ -98,18 +99,18 @@ class actions():
                     if(self.test):
                         if(confidence < lowestConf):
                             lowestConf = confidence
-                    if(confidence < minConf): err = True
                     predInd = predicted.item()
                     #print(predInd)
                     label = self.classes[predInd]
                     amts[predInd]+=1
+                    
                     if(label == "player"):
                         if(playerFound): err = True
                         playerFound = True
                         print(f"player detected at {i}, {j} | confidence: {confidence}")
                         if(not self.test): #don't collect data if in testing 
                             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                            fname = os.path.join('detected_players', f"{timestamp}_({i}_{j}).png")
+                            fname = os.path.join('detected_players', f"{timestamp}_({i}_{j})_{confidence}.png")
                             cv2.imwrite(fname, tiles[flatIdx])
                         playerState = (i, j)
                     elif(label == "king"):
@@ -118,7 +119,14 @@ class actions():
                         print(f"king detected at {i}, {j} | confidence: {confidence}") 
                         if(not self.test): #don't collect data if in testing               
                             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                            fname = os.path.join("detected_kings", f"{timestamp}_({i}_{j}).png")
+                            fname = os.path.join("detected_kings", f"{timestamp}_({i}_{j})_{confidence}.png")
+                            cv2.imwrite(fname, tiles[flatIdx])
+                    elif(confidence < minConf): 
+                        err = True
+                        if(not self.test): #don't collect data if in testing 
+                            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                            fname = os.path.join('low_conf_tiles', f"{timestamp}_({i}_{j})_{confidence}.png")
+                            print(f"Low confidence tile detected at {i}, {j} | detecting a {label} with confidence: {confidence} |")     
                             cv2.imwrite(fname, tiles[flatIdx])
                 row.append(predInd)
             tileStates.append(row)
@@ -152,7 +160,7 @@ class actions():
         done = (deadKing != 0 or deadPlayer != 0)
         win = deadKing != 0
 
-        return (dPawns + dBishops*3 + dKnights*3 + dRooks*5 + dQueens*9 + deadKing + deadPlayer - 3), done, win
+        return (dPawns + dBishops*3 + dKnights*3 + dRooks*5 + dQueens*9 + deadKing + deadPlayer - 1), done, win
     def detectWin(self, threshold = 500):
         imgCrop = self.img[1600: 1800, 1000:1900]
         winScreenCrop = self.winScreen[1600: 1800, 1000:1900]
@@ -178,7 +186,8 @@ class actions():
             x = ((state-1) % 8)
             y = 7-((state-1) // 8)
             print(f"x, y: {x}, {y}")
-            pyautogui.click(478+(x*73), 730 - (y*73))
+            pyautogui.click(478+(x*73), 750 - (y*73)) #do 750 if fullscreen is off else do 730 
+            #time.sleep(1)
             pyautogui.mouseDown()
             pyautogui.mouseUp()
 
@@ -194,7 +203,8 @@ class actions():
             x = ((state-65) % 8)
             y = 7-((state-65) // 8)
             print(f"x, y: {x}, {y}")
-            pyautogui.click(478+(x*73), 730 - (y*73))
+            pyautogui.click(478+(x*73), 750 - (y*73))
+            #time.sleep(1)
             pyautogui.mouseDown()
             pyautogui.mouseUp()
 
@@ -215,7 +225,7 @@ class actions():
             pyautogui.mouseUp()
             time.sleep(2.0)
 
-            pyautogui.click(600, 510)#click a modifier
+            pyautogui.click(600, 530)#click a modifier
             pyautogui.mouseDown()
             pyautogui.mouseUp()
             time.sleep(2.0)
@@ -227,7 +237,7 @@ class actions():
             pyautogui.keyDown('esc')#go into menu
             pyautogui.keyUp('esc')
 
-            pyautogui.click(600, 720)#resign
+            pyautogui.click(600, 750)#resign
             pyautogui.mouseDown()
             pyautogui.mouseUp()
             pyautogui.mouseDown()
@@ -236,7 +246,7 @@ class actions():
             pyautogui.mouseDown()#quicken resign screen
             pyautogui.mouseUp()
 
-            pyautogui.click(600, 510)#click try again button
+            pyautogui.click(600, 530)#click try again button
             pyautogui.mouseDown()
             pyautogui.mouseUp()
             time.sleep(1.0)
@@ -245,7 +255,7 @@ class actions():
             pyautogui.mouseUp()
             time.sleep(2.0)
         else:#restart after a loss
-            pyautogui.click(600, 510)
+            pyautogui.click(600, 530)
             pyautogui.mouseDown()
             pyautogui.mouseUp()
             time.sleep(1.0)
@@ -322,7 +332,7 @@ class actions():
                                 y += dy   
                     #elif (tileType == 5):  #no logic needed for player
 
-            playerIsSafe = avialableTiles[self.playerState[0],self.playerState[1]]
+            playerIsSafe = avialableTiles[self.playerState[0]][self.playerState[1]]
 
             allMoves = [[False for _ in range(8)] for _ in range(8)] 
 
@@ -382,10 +392,10 @@ class actions():
         self.act(action)
         returnCode = 0
         print("preforming getState()")
-        if(self.getState()==-1):# err (multiple players or kings found)
+        if(self.getState(minConf=0.7)==-1):# err (multiple players or kings found)
             time.sleep(0.5)
             print("retrying getState()")
-            if(self.getState(redo=True, minConf=0.9) == -1):
+            if(self.getState(redo=True) == -1):
                 print("retry unsuccesful, ending training")            
                 returnCode = -1
             else:

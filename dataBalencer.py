@@ -4,7 +4,7 @@ import shutil
 
 DATASET_FOLDER = 'dataBalenced'
 SORTED_FOLDER = 'dataSorted'
-MAX_PER_CLASS = 25
+DEFAULT_MAX_PER_CLASS = 40
 TEST_PERCENT = 0.2
 
 
@@ -13,6 +13,8 @@ if os.path.exists('dataBalenced'):
 os.makedirs(DATASET_FOLDER, exist_ok=True)
 
 for label in os.listdir(SORTED_FOLDER):
+    max_this_class = DEFAULT_MAX_PER_CLASS
+
     class_folder = os.path.join(SORTED_FOLDER, label)
     if not os.path.isdir(class_folder):
         continue
@@ -22,10 +24,31 @@ for label in os.listdir(SORTED_FOLDER):
     files = os.listdir(class_folder) #get files
     random.shuffle(files)
 
-    files = files[:MAX_PER_CLASS] #limit amt of files
-    if(label == "board"):
-        files = files[:MAX_PER_CLASS*2]
+    if(label == "uniqueBoards"):
+        label = "board"
+    elif(label == "board"):
+        max_this_class = 80
+    elif(label == "uniqueBishop"):
+        label = "bishop"
+        max_this_class = 20
+    elif(label == "uniqueKings"):
+        label = "king"
+        max_this_class = 20
+    elif(label == "uniqueKnight"):
+        label = "knight"
+        max_this_class = 20
+    elif(label == "uniquePawn"):
+        label = "pawn"
+        max_this_classS = 20
+    elif(label == "uniquePlayer"):
+        label = "player"
+        max_this_class = 20
+    elif(label == "uniqueRook"):
+        label = "rook"
+        max_this_class = 20
     
+    files = files[:max_this_class] #limit amt of files
+
     splitIdx = int(len(files)*(1-TEST_PERCENT))
     trainFiles = files[:splitIdx]
     testFiles = files[splitIdx:]
@@ -44,6 +67,7 @@ for label in os.listdir(SORTED_FOLDER):
         src = os.path.join(class_folder, f)
         dst = os.path.join(target_folder_test, f)
         shutil.copy(src, dst)
+    
     
 
 print('Balanced dataset saved in:', DATASET_FOLDER)
